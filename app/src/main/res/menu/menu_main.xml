@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/menu_add_config"
+        android:title="Add configuration"
+        android:icon="@drawable/ic_baseline_add_24"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/menu_reload_config"
+        android:title="Reload configurations"
+        android:icon="@drawable/ic_baseline_refresh_24"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/menu_toggle"
+        android:title="Toggle"
+        app:showAsAction="always"
+        app:actionLayout="@layout/switch_item" />
+
+</menu>

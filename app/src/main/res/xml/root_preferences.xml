@@ -1,0 +1,34 @@
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <SwitchPreferenceCompat
+        app:key="bypass_special"
+        app:title="Bypass special addresses"
+        app:iconSpaceReserved="false" />
+
+    <SwitchPreferenceCompat
+        app:key="allow_remote"
+        app:title="Allow remote connections"
+        app:summary="Allow other hosts to connect to port 1082 with HTTP/SOCKS5 protocol"
+        app:iconSpaceReserved="false" />
+
+    <SwitchPreferenceCompat
+        app:key="allow_debug"
+        app:title="Allow debugging"
+        app:summary="Enable debug HTTP server on localhost:6061"
+        app:iconSpaceReserved="false" />
+
+    <EditTextPreference
+        app:key="dns_server"
+        app:title="DNS server override"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+
+    <ListPreference
+        app:key="tun_ip"
+        app:title="Tun interface address"
+        app:entries="@array/tun_ip"
+        app:entryValues="@array/tun_ip"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+
+</PreferenceScreen>
