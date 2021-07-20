@@ -47,7 +47,6 @@ class TunnelService : VpnService() {
     }
     private lateinit var mNotificationManager: NotificationManager
     private var mMutProcess: Process? = null
-    private var mTunnelProcess: Process? = null
     private var mFd: ParcelFileDescriptor? = null
 
     override fun onCreate() {
@@ -110,7 +109,6 @@ class TunnelService : VpnService() {
 
             synchronized(this) {
                 try {
-                    startMutProcess(outbound, dns, rules, allowRemote, allowDebug)
                     val builder = Builder()
                         .allowFamily(OsConstants.AF_INET)
                         .addAddress(tunAddress, 30)
@@ -122,7 +120,7 @@ class TunnelService : VpnService() {
                         builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", 1082))
                     }
                     mFd = builder.establish()
-                    startTunnelProcess(tunEndpointAddress)
+                    startMutProcess(outbound, dns, rules, allowRemote, allowDebug)
                 } catch (e: Exception) {
                     e.printStackTrace()
                     stopTunnel()
@@ -143,15 +141,13 @@ class TunnelService : VpnService() {
     }
 
     private fun stopTunnel() {
-        if (mFd != null || mMutProcess != null || mTunnelProcess != null) {
+        if (mFd != null || mMutProcess != null) {
             synchronized(this) {
-                if (mFd != null || mMutProcess != null || mTunnelProcess != null) {
-                    mTunnelProcess?.destroy()
-                    mTunnelProcess = null
-                    mFd?.close()
-                    mFd = null
+                if (mFd != null || mMutProcess != null) {
                     mMutProcess?.destroy()
                     mMutProcess = null
+                    mFd?.close()
+                    mFd = null
 
                     stopForeground(true)
                     sendBroadcastMessage()
@@ -167,9 +163,11 @@ class TunnelService : VpnService() {
         allowRemote: Boolean,
         allowDebug: Boolean
     ) {
+        val fdPath = "${cacheDir}/fd"
         val argsList = mutableListOf(
             "${applicationInfo.nativeLibraryDir}/libmut.so",
-            "-in", "mix://${if (allowRemote) "" else "127.0.0.1"}:1082",
+            "-in", "mix://${if (allowRemote) "" else "localhost"}:1082/?udp=1",
+            "-in", "tun://?fdpath=${fdPath}&dnsgw=localhost:1053",
             "-out", outbound,
             "-rules", rules,
             "-dns", dns
@@ -183,32 +181,17 @@ class TunnelService : VpnService() {
             runCatching {
                 mMutProcess!!.inputStream.copyTo(System.out, 256)
             }
-            println("Mut process stopped")
-            stopTunnel()
         }
         GlobalScope.launch(Dispatchers.IO) {
             runCatching {
                 mMutProcess!!.errorStream.copyTo(System.err, 256)
             }
         }
-    }
 
-    private fun startTunnelProcess(tunEndpointAddress: String) {
-        val fdPath = "${cacheDir}/fd"
-        mTunnelProcess = ProcessBuilder(
-            "${applicationInfo.nativeLibraryDir}/libtunnel.so",
-            "--netif-ipaddr", tunEndpointAddress,
-            "--netif-netmask", "255.255.255.255",
-            "--tunmtu", "1500",
-            "--socks-server-addr", "127.0.0.1:1082",
-            "--enable-udprelay",
-            "--dnsgw", "127.0.0.1:1053",
-            "--sock-path", fdPath
-        ).start()
         GlobalScope.launch(Dispatchers.IO) {
             val maxRetries = 10
             for (i in 0..maxRetries) {
-                if (i == maxRetries || mTunnelProcess == null) {
+                if (i == maxRetries || mMutProcess == null) {
                     break
                 }
                 try {
@@ -223,7 +206,8 @@ class TunnelService : VpnService() {
                 }
             }
 
-            mTunnelProcess?.waitFor()
+            mMutProcess?.waitFor()
+            println("Mut process stopped")
             stopTunnel()
         }
     }
@@ -231,7 +215,7 @@ class TunnelService : VpnService() {
     private fun sendBroadcastMessage() {
         sendBroadcast(
             Intent(BROADCAST_MESSAGE).putExtra(
-                "msg", if (mMutProcess != null) {
+                "msg", if (mFd != null) {
                     MSG_RUNNING
                 } else {
                     MSG_STOPPED

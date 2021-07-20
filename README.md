@@ -5,13 +5,9 @@ A sample Android client for Mut project
 ## Build instructions
 
 1. Build Mut executables for `android/arm64`, `android/arm`, `android/amd64` and `android/386`. Name the executables with `libmut.so` and put them into corresponding folders under `app/src/main/jniLibs`.
-2. Build [tun2socks](https://github.com/shadowsocks/badvpn/tree/shadowsocks-android/tun2socks) executables, name them with `libtunnel.so` and put them into corresponding folders under `app/src/main/jniLibs`.
-3. Build the app with Android Studio.
+2. Build the app with Android Studio.
 
 ## License
-
-This project contains 3rd-party open-source software:
-- [tun2socks](https://github.com/shadowsocks/badvpn/tree/shadowsocks-android/tun2socks) (BSD)
 
 Copyright (c) 2021 DeepAQ Labs
 
