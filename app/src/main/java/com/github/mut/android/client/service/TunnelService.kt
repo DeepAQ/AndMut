@@ -26,6 +26,12 @@ class TunnelService : VpnService() {
     companion object {
         val BROADCAST_REQUEST = "${TunnelService::class.qualifiedName}.REQUEST"
         val BROADCAST_MESSAGE = "${TunnelService::class.qualifiedName}.MESSAGE"
+        val BYPASS_CIDR = listOf(
+            "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+            "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24", "192.168.0.0/16",
+            "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "233.252.0.0/24", "240.0.0.0/4"
+        )
+        const val TUN_MTU = 1500
         const val DEFAULT_TUN_IP = "172.31.255.2"
         const val DEFAULT_DNS = "udp://1.1.1.1"
         const val REQ_UPDATE = 1
@@ -94,11 +100,9 @@ class TunnelService : VpnService() {
             var rules = "final,default"
             if (intent.getBooleanExtra("bypass_special", false)) {
                 val cidrFile = File(filesDir, "directip.txt")
-                if (!cidrFile.exists()) {
-                    cidrFile.outputStream().use { os ->
-                        resources.openRawResource(R.raw.directip).use { ins ->
-                            ins.copyTo(os)
-                        }
+                cidrFile.outputStream().use { os ->
+                    resources.openRawResource(R.raw.directip).use { ins ->
+                        ins.copyTo(os)
                     }
                 }
                 rules = "cidr:directip.txt,direct;final,default"
@@ -110,14 +114,16 @@ class TunnelService : VpnService() {
             synchronized(this) {
                 try {
                     val builder = Builder()
+                        .setMtu(TUN_MTU)
                         .allowFamily(OsConstants.AF_INET)
                         .addAddress(tunAddress, 30)
-                        .addRoute("0.0.0.0", 0)
                         .addDnsServer(tunEndpointAddress)
-                        .setMtu(1500)
                         .addDisallowedApplication(packageName)
+                    getRoutesFromExcludedRoutes(BYPASS_CIDR).forEach {
+                        builder.addRoute(it.prefixAddress(), it.prefixLength())
+                    }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", 1082))
+                        builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", 1082, BYPASS_CIDR))
                     }
                     mFd = builder.establish()
                     startMutProcess(outbound, dns, rules, allowRemote, allowDebug)
@@ -165,9 +171,8 @@ class TunnelService : VpnService() {
     ) {
         val fdPath = "${cacheDir}/fd"
         val argsList = mutableListOf(
-            "${applicationInfo.nativeLibraryDir}/libmut.so",
             "-in", "mix://${if (allowRemote) "" else "localhost"}:1082/?udp=1",
-            "-in", "tun://?fdpath=${fdPath}&dnsgw=localhost:1053",
+            "-in", "tun://?fdpath=${fdPath}&mtu=${TUN_MTU}&dnsgw=localhost:1053",
             "-out", outbound,
             "-rules", rules,
             "-dns", dns
@@ -176,7 +181,13 @@ class TunnelService : VpnService() {
             argsList.addAll(arrayOf("-debug", "6061"))
         }
 
-        mMutProcess = ProcessBuilder(argsList).directory(filesDir).start()
+        mMutProcess = ProcessBuilder(listOf("${applicationInfo.nativeLibraryDir}/libmut.so", "-stdin"))
+            .directory(filesDir).start()
+        mMutProcess!!.outputStream.use {
+            it.write(argsList.joinToString(" ").encodeToByteArray())
+            it.write(10)
+            it.flush()
+        }
         GlobalScope.launch(Dispatchers.IO) {
             runCatching {
                 mMutProcess!!.inputStream.copyTo(System.out, 256)
